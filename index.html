@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Blackjack Karten-Counter &amp; Strategie-Dashboard</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="chip">♠</span>
+    <div>
+      <h1>Blackjack Counter &amp; Dashboard</h1>
+      <p class="sub">Hi-Lo Kartenzählen · Live-Statistik · Basisstrategie · Geldverwaltung</p>
+    </div>
+  </div>
+  <div class="topctrls">
+    <label>Decks im Schuh
+      <select id="deckCount">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="4">4</option>
+        <option value="6" selected>6</option>
+        <option value="8">8</option>
+      </select>
+    </label>
+    <label>Währung
+      <input id="currency" type="text" value="CHF" maxlength="4" />
+    </label>
+    <button id="newShoe" class="btn btn-warn" title="Zählung zurücksetzen, Bankroll behalten">Neuer Schuh</button>
+    <button id="helpBtn" class="btn" title="Hilfe & alle Shortcuts (Taste ?)">? Hilfe</button>
+    <span id="userInfo" class="userinfo" hidden></span>
+    <button id="adminBtn" class="btn" hidden>Admin</button>
+    <button id="logoutBtn" class="btn" hidden>Abmelden</button>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- ===================== KARTEN-EINGABE ===================== -->
+  <section class="panel span2" id="inputPanel">
+    <h2>Ausgeteilte Karten erfassen</h2>
+    <p class="hint">Jede sichtbare Karte am Tisch anklicken (oder Tastatur: <b>2–9</b>, <b>0</b>=10/Bild, <b>A</b>=Ass, <b>U</b>=zurück). Das aktualisiert die Zählung live.</p>
+    <div class="cardpad" id="cardpad"><!-- Buttons werden per JS erzeugt --></div>
+    <div class="inputfoot">
+      <button id="undoCard" class="btn">↶ Letzte Karte zurück</button>
+      <span class="dealt">Erfasst: <b id="dealtCount">0</b> Karten</span>
+    </div>
+  </section>
+
+  <!-- ===================== LIVE STATISTIK ===================== -->
+  <section class="panel span2" id="statsPanel">
+    <h2>Live-Statistik</h2>
+    <div class="stats">
+      <div class="stat big">
+        <span class="label">Running Count</span>
+        <span class="value" id="runningCount">0</span>
+      </div>
+      <div class="stat big">
+        <span class="label">True Count</span>
+        <span class="value" id="trueCount">0.0</span>
+      </div>
+      <div class="stat">
+        <span class="label">Decks übrig</span>
+        <span class="value" id="decksLeft">6.0</span>
+      </div>
+      <div class="stat">
+        <span class="label">Karten übrig</span>
+        <span class="value" id="cardsLeft">312</span>
+      </div>
+      <div class="stat">
+        <span class="label">Durchdringung</span>
+        <span class="value" id="penetration">0%</span>
+      </div>
+      <div class="stat">
+        <span class="label">Dein Vorteil</span>
+        <span class="value" id="edge">−0.5%</span>
+      </div>
+    </div>
+    <div class="meterwrap">
+      <span class="meterlabel">Vorteil-Anzeige</span>
+      <div class="meter"><div class="meterfill" id="edgeMeter"></div><div class="meterzero"></div></div>
+      <span class="metertext" id="edgeText">Hausvorteil – nur Minimum setzen</span>
+    </div>
+  </section>
+
+  <!-- ===================== EINSATZ-EMPFEHLUNG ===================== -->
+  <section class="panel" id="betPanel">
+    <h2>Einsatz-Empfehlung</h2>
+    <div class="betgrid">
+      <label>Einheit (1 Unit)
+        <input id="unitSize" type="number" min="1" step="1" value="10" />
+      </label>
+      <div class="stat big accentbox">
+        <span class="label">Empfohlener Einsatz</span>
+        <span class="value" id="recBet">10</span>
+      </div>
+    </div>
+    <ul class="betinfo">
+      <li>Spread (Units): <b id="recUnits">1×</b></li>
+      <li>Kelly-Vorschlag (½): <b id="kellyBet">–</b></li>
+    </ul>
+    <p class="hint">Faustregel: erst ab True Count <b>+1</b> hast du einen Vorteil. Darunter Tischminimum spielen.</p>
+  </section>
+
+  <!-- ===================== STRATEGIE-BERATER ===================== -->
+  <section class="panel span2" id="strategyPanel">
+    <h2>Basisstrategie-Berater (inkl. Splits)</h2>
+    <div class="strat">
+      <div class="stratcol">
+        <h3>Deine Hand</h3>
+        <div class="minipad" id="handPad"></div>
+        <div class="handline">
+          <span id="handDisplay" class="handcards">–</span>
+          <button id="clearHand" class="btn btn-small">leeren</button>
+        </div>
+      </div>
+      <div class="stratcol">
+        <h3>Dealer offene Karte</h3>
+        <div class="minipad" id="dealerPad"></div>
+        <div class="handline"><span id="dealerDisplay" class="handcards">–</span></div>
+      </div>
+    </div>
+    <div class="action" id="actionBox">
+      <span class="actionlabel">Empfehlung</span>
+      <span class="actionvalue" id="actionValue">Hand &amp; Dealerkarte wählen</span>
+      <span class="actionnote" id="actionNote"></span>
+    </div>
+  </section>
+
+  <!-- ===================== GELDVERWALTUNG ===================== -->
+  <section class="panel span2" id="moneyPanel">
+    <h2>Geldverwaltung &amp; Session</h2>
+    <div class="moneytop">
+      <label>Start-Bankroll
+        <input id="startBankroll" type="number" min="0" step="10" value="1000" />
+      </label>
+      <div class="stat big accentbox">
+        <span class="label">Aktuelle Bankroll</span>
+        <span class="value" id="bankroll">1000</span>
+      </div>
+      <label>Einsatz dieser Hand
+        <input id="handBet" type="number" min="0" step="5" value="10" />
+      </label>
+    </div>
+    <div class="outcomes">
+      <button class="btn btn-win" data-result="win">Gewonnen (1:1)</button>
+      <button class="btn btn-win" data-result="bj">Blackjack (3:2)</button>
+      <button class="btn btn-lose" data-result="lose">Verloren</button>
+      <button class="btn btn-push" data-result="push">Push (Unentschieden)</button>
+      <button class="btn btn-lose" data-result="surrender">Surrender (½)</button>
+    </div>
+    <p class="hint">Bei <b>Double</b> Einsatz verdoppeln, dann Gewonnen/Verloren. Bei <b>Split</b> jede Teilhand einzeln verbuchen.</p>
+
+    <div class="sessiongrid">
+      <div class="stat"><span class="label">Hände</span><span class="value" id="hands">0</span></div>
+      <div class="stat"><span class="label">Gewonnen</span><span class="value" id="wins">0</span></div>
+      <div class="stat"><span class="label">Verloren</span><span class="value" id="losses">0</span></div>
+      <div class="stat"><span class="label">Push</span><span class="value" id="pushes">0</span></div>
+      <div class="stat"><span class="label">Trefferquote</span><span class="value" id="winrate">0%</span></div>
+      <div class="stat"><span class="label">Gesamt gesetzt</span><span class="value" id="wagered">0</span></div>
+      <div class="stat"><span class="label">Netto-Gewinn</span><span class="value" id="profit">0</span></div>
+      <div class="stat"><span class="label">Höchststand</span><span class="value" id="peak">1000</span></div>
+    </div>
+
+    <div class="chartwrap">
+      <canvas id="chart" width="900" height="180"></canvas>
+    </div>
+    <div class="moneyfoot">
+      <button id="undoHand" class="btn">↶ Letzte Hand zurück</button>
+      <button id="exportCsv" class="btn">↓ Als CSV exportieren</button>
+      <button id="importCsv" class="btn">↑ CSV importieren</button>
+      <button id="resetSession" class="btn btn-warn">Session zurücksetzen</button>
+      <input id="importFile" type="file" accept=".csv,text/csv" hidden />
+    </div>
+  </section>
+
+  <!-- ===================== KARTEN-VERTEILUNG ===================== -->
+  <section class="panel span2" id="compPanel">
+    <h2>Verbleibende Karten im Schuh</h2>
+    <div class="comp" id="composition"></div>
+    <div class="complegend">
+      <span class="dot low"></span>Niedrig (2–6, +1)
+      <span class="dot neu"></span>Neutral (7–9, 0)
+      <span class="dot high"></span>Hoch (10–A, −1)
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <p><b>Nur zum Üben &amp; Analysieren.</b> Kartenzählen im Kopf ist legal, aber elektronische Hilfsmittel am echten Tisch sind in vielen Casinos/Ländern (z.&nbsp;B. Nevada) verboten. Details siehe <code>LIESMICH.md</code>.</p>
+  <button id="resetAll" class="btn btn-danger btn-small">Alles zurücksetzen</button>
+</footer>
+
+<!-- ===================== HILFE & ÜBERSICHT (Button „? Hilfe" oder Taste ?) ===================== -->
+<div id="shortcutModal" class="modal-overlay" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="shortcutTitle">
+    <button id="modalClose" class="modal-close" type="button" aria-label="Schliessen">✕</button>
+    <h2 id="shortcutTitle">Hilfe &amp; Übersicht</h2>
+
+    <h3>Tastatur-Shortcuts</h3>
+    <table class="modal-keys"><tbody>
+      <tr><td><kbd>2</kbd>–<kbd>9</kbd></td><td>Zahlkarte erfassen</td></tr>
+      <tr><td><kbd>0</kbd> / <kbd>T</kbd></td><td>10 / Bildkarte erfassen</td></tr>
+      <tr><td><kbd>A</kbd></td><td>Ass erfassen</td></tr>
+      <tr><td><kbd>U</kbd> / <kbd>⌫</kbd></td><td>Letzte Karte zurücknehmen</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Hand verbuchen: Gewonnen (1:1)</td></tr>
+      <tr><td><kbd>B</kbd></td><td>Hand verbuchen: Blackjack (3:2)</td></tr>
+      <tr><td><kbd>V</kbd></td><td>Hand verbuchen: Verloren</td></tr>
+      <tr><td><kbd>P</kbd></td><td>Hand verbuchen: Push</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Hand verbuchen: Surrender (½)</td></tr>
+      <tr><td><kbd>+</kbd> / <kbd>−</kbd></td><td>Einsatz um eine Unit erhöhen / verringern</td></tr>
+      <tr><td><kbd>N</kbd></td><td>Neuer Schuh (Zählung zurücksetzen)</td></tr>
+      <tr><td><kbd>E</kbd></td><td>Als CSV exportieren</td></tr>
+      <tr><td><kbd>I</kbd></td><td>CSV importieren (Spielstand laden)</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Diese Hilfe öffnen / schliessen</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Hilfe schliessen</td></tr>
+    </tbody></table>
+
+    <h3>Funktionen im Überblick</h3>
+    <table class="modal-feat"><tbody>
+      <tr><td>Karten &amp; Zählung</td><td>Jede sichtbare Karte erfassen → Running &amp; True Count (Hi-Lo) live.</td></tr>
+      <tr><td>Live-Statistik</td><td>True Count, Decks übrig, Durchdringung und grobe Vorteils-Schätzung.</td></tr>
+      <tr><td>Einsatz-Empfehlung</td><td>Spread-Rampe nach True Count plus halber-Kelly-Vorschlag.</td></tr>
+      <tr><td>Basisstrategie</td><td>Hand + Dealerkarte → HIT / STAND / DOUBLE / SPLIT / SURRENDER (S17, DAS).</td></tr>
+      <tr><td>Geldverwaltung</td><td>Bankroll, Einsätze, Ergebnis-Buttons, Session-Statistik, Verlaufschart.</td></tr>
+      <tr><td>CSV Import/Export</td><td>Spielstand als .csv speichern – und eine (auch fremde) CSV wieder laden.</td></tr>
+      <tr><td>Cloud-Speicher</td><td>Stand pro Benutzer in der Cloud – auf jedem Gerät verfügbar (Firebase).</td></tr>
+      <tr><td>Zurücksetzen</td><td>„Neuer Schuh" = nur Zählung · „Session" = nur Geld · „Alles" = kompletter Stand.</td></tr>
+    </tbody></table>
+
+    <p class="modal-hint">Karten-Shortcuts sind inaktiv, während du in einem Eingabefeld tippst. · Nur zum Üben &amp; Analysieren – elektronische Hilfsmittel am echten Tisch sind vielerorts verboten.</p>
+  </div>
+</div>
+
+<!-- ===================== LOGIN (Pflicht) ===================== -->
+<div id="loginOverlay" class="modal-overlay login-overlay">
+  <div class="modal-box login-box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <h2 id="loginTitle">Anmeldung erforderlich</h2>
+    <p class="modal-hint" id="loginMsg">Bitte mit deinem Konto anmelden, um das Tool zu nutzen.</p>
+    <label class="f-label">E-Mail
+      <input id="loginEmail" type="email" autocomplete="username" placeholder="name@beispiel.ch" />
+    </label>
+    <label class="f-label">Passwort
+      <input id="loginPw" type="password" autocomplete="current-password" placeholder="••••••••" />
+    </label>
+    <button id="loginBtn" class="btn btn-win login-submit">Anmelden</button>
+    <p class="login-error" id="loginError"></p>
+    <p class="modal-hint">Noch kein Konto? Konten werden von einem Admin angelegt.</p>
+  </div>
+</div>
+
+<!-- ===================== ADMIN-CONSOLE ===================== -->
+<div id="adminOverlay" class="modal-overlay" hidden>
+  <div class="modal-box admin-box" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+    <button id="adminClose" class="modal-close" type="button" aria-label="Schliessen">✕</button>
+    <h2 id="adminTitle">Admin-Console · Benutzerverwaltung</h2>
+
+    <h3>Neuen Benutzer anlegen</h3>
+    <div class="admin-create">
+      <input id="newUserEmail" type="email" placeholder="E-Mail" autocomplete="off" />
+      <input id="newUserPw" type="text" placeholder="Passwort (min. 6 Zeichen)" autocomplete="off" />
+      <button id="createUserBtn" class="btn btn-win">Anlegen</button>
+    </div>
+    <p class="modal-hint" id="createUserMsg"></p>
+
+    <h3>Benutzer</h3>
+    <div class="admin-tablewrap">
+      <table class="admin-table">
+        <thead><tr><th>E-Mail</th><th>Hände</th><th>Bankroll</th><th>Status</th><th></th></tr></thead>
+        <tbody id="userList"></tbody>
+      </table>
+    </div>
+    <p class="modal-hint">„Daten löschen" entfernt nur den Spielstand. Ein Login-Konto vollständig zu löschen geht in der Firebase-Konsole (Authentication).</p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script type="module" src="auth.js"></script>
+</body>
+</html>

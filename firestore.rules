@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Admin = eingeloggter Nutzer, dessen eigenes Profil role == 'admin' hat.
+    // Der ERSTE Admin wird einmalig in der Firebase-Konsole gesetzt (Konsole umgeht die Regeln).
+    // Es steht KEINE E-Mail in den Regeln.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{uid} {
+      // Lesen: eigenes Profil oder Admin.
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+
+      // Anlegen/Löschen NUR Admin → keine Selbst-Registrierung.
+      allow create, delete: if isAdmin();
+
+      // Ändern: Admin alles; der Eigentümer nur, ohne role/disabled zu verändern
+      // (keine Selbst-Hochstufung zum Admin, kein Aufheben einer Sperre).
+      allow update: if isAdmin()
+        || ( request.auth != null && request.auth.uid == uid
+             && request.resource.data.role == resource.data.role
+             && request.resource.data.disabled == resource.data.disabled );
+    }
+
+    // Alles andere ist gesperrt.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
